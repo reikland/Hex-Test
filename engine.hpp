@@ -3,7 +3,6 @@
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <cctype>
 #include <cstdint>
 #include <iomanip>
 #include <iosfwd>
@@ -12,6 +11,7 @@
 #include <queue>
 #include <random>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -66,19 +66,7 @@ private:
     uint64_t zobrist_side_;
     mutable std::mt19937_64 rng_;
     // union-find per player
-    struct UF {
-        struct Change{int b=-1; int ra=0; int a=-1;};
-        std::vector<int> p, r; std::vector<Change> hist;
-        void init(int n);
-        int find(int) const;
-        int find_const(int x) const { return find_const_impl(x); }
-        int find_const_impl(int x) const;
-        bool unite(int,int);
-        size_t snapshot() const;
-        void rollback(size_t snap);
-        bool connected(int,int) const;
-    };
-    struct MoveHist { int pos=-1; Player pl=EMPTY; uint64_t hash=0; size_t snap_w=0, snap_b=0; };
+    struct UF { std::vector<int> p, r; void init(int n); int find(int); int find_const(int) const; void unite(int,int); bool connected(int,int) const; };
     UF uf_w_, uf_b_;
     int virt_w_top_, virt_w_bot_, virt_b_left_, virt_b_right_;
     // helpers
@@ -86,21 +74,20 @@ private:
     int idx(int r, int c) const;
     std::pair<int,int> rc(int index) const;
     void update_uf(int pos, Player pl);
+    void rebuild_uf();
     double adjacency_bonus(int pos, Player pl) const;
     double center_bias(int pos) const;
     double bridge_bonus(int pos, Player pl) const;
     double ladder_bonus(int pos, Player pl) const;
     double ladder_breaker_bonus(int pos, Player pl) const;
     double ziggurat_bonus(int pos, Player pl) const;
-    struct PathInfo { std::vector<int> dist_self_from, dist_self_to, dist_opp_from, dist_opp_to; int best_self=0, best_opp=0; };
+    struct PathInfo { std::vector<int> dist_self, dist_opp; int best_self=0, best_opp=0; };
     PathInfo compute_paths(Player pl) const;
     double path_improve(int pos, Player pl, const PathInfo& pi) const;
     double block_opp(int pos, Player pl, const PathInfo& pi) const;
     double heuristic_value(Player pl) const;
     double value_estimate(Player pl) const;
     std::vector<int> legal_moves() const;
-    void make_move(int pos, MoveHist& h);
-    void undo_move(const MoveHist& h);
     // MCTS
     struct Edge { int move=-1; Node* child=nullptr; double P=0; int N=0; double W=0; double Q=0; };
     struct Node {

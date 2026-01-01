@@ -17,7 +17,7 @@ int main(){
         else if(cmd=="print"){ engine.print(std::cout); }
         else if(cmd=="turn"){ std::cout << (engine.to_move()==WHITE?"White (top-bottom)":"Black (left-right)") << " to move"<<std::endl; }
         else if(cmd=="play"){ std::string c; ss>>c; if(c.empty()){ std::cout << "Usage: play a1"<<std::endl; continue;} if(engine.play_coord(c)) std::cout << "Played "<<c<<std::endl; else std::cout << "Illegal"<<std::endl; }
-        else if(cmd=="gen"){ int ms; if(!(ss>>ms)) ms=0; int mv=engine.genmove(ms); auto st=engine.last_stats(); if(mv<0) { std::cout << "No move"<<std::endl; continue;} std::cout << "Engine plays "<<engine.idx_to_coord(mv)<<" (winrate "<<st.root_winrate*100<<"%, sims "<<st.iters<<", rollouts "<<st.playouts<<")"<<std::endl; }
+        else if(cmd=="gen"){ int ms; if(!(ss>>ms)) ms=0; int mv=engine.genmove(ms); if(mv<0) { std::cout << "No move"<<std::endl; continue;} std::cout << "Engine plays "<<engine.idx_to_coord(mv)<<" (winrate "<<engine.last_stats().root_winrate*100<<"%)"<<std::endl; }
         else { std::cout << "Unknown command"<<std::endl; }
         Player w; if(engine.is_terminal(&w)){ std::cout << (w==WHITE?"White":"Black") << " wins!"<<std::endl; engine.print(std::cout); }
     }
