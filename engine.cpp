@@ -361,6 +361,13 @@ double Engine::simulate(Node* node, int depth){
         for(size_t i=0;i<moves.size();++i){ node->edges[i].move=moves[i]; node->edges[i].P=priors[i]; }
         node->expanded=true;
         if(node==root_ && cfg_.use_root_noise) apply_dirichlet(node);
+        if(node->edges.empty()){
+            node->terminal = true;
+            node->winner = EMPTY;
+            node->N++;
+            node->Q = node->W / node->N;
+            return 0.0;
+        }
         double v_roll=rollout(pl); double v_heur=heuristic_value(pl); double v=0.65*v_roll+0.35*v_heur;
         node->N++; node->W+=v; node->Q=node->W/node->N; return v;
     }
@@ -380,6 +387,10 @@ double Engine::simulate(Node* node, int depth){
 
 int Engine::genmove(int ms, int sims){
     if(ms<=0) ms=cfg_.default_ms; if(sims<=0) sims=cfg_.default_sims;
+    if(legal_moves().empty()){
+        last_stats_ = SearchStats{};
+        return -1;
+    }
     root_ = get_node(zobrist_hash_); if(!root_){ root_=new_node(); root_->hash=zobrist_hash_; root_->player=to_move_; if(cfg_.use_transposition) { tt_[zobrist_hash_]=root_; maybe_evict_tt(); } }
     auto start=std::chrono::steady_clock::now(); last_stats_=SearchStats{};
     int it=0;
@@ -389,6 +400,7 @@ int Engine::genmove(int ms, int sims){
         simulate(root_,0); it++;
     }
     // choose move
+    if(root_->edges.empty()) return -1;
     Edge* best=nullptr; for(auto &e: root_->edges){ if(!best || e.N>best->N) best=&e; }
     int move = best?best->move:-1;
     double winrate = best && root_->N>0 ? 0.5*(best->Q+1) : 0.5;
