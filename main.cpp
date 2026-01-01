@@ -16,7 +16,7 @@ int main(){
         else if(cmd=="new"){ engine.reset(); std::cout << "New game."<<std::endl; }
         else if(cmd=="print"){ engine.print(std::cout); }
         else if(cmd=="turn"){ std::cout << (engine.to_move()==WHITE?"White (top-bottom)":"Black (left-right)") << " to move"<<std::endl; }
-        else if(cmd=="play"){ std::string c; ss>>c; if(c.empty()){ std::cout << "Usage: play a1"<<std::endl; continue;} if(engine.play_coord(c)) std::cout << "Played "<<c<<std::endl; else std::cout << "Illegal"<<std::endl; }
+        else if(cmd=="play"){ std::string c; ss>>c; if(c.empty()){ std::cout << "Usage: play a1"<<std::endl; continue;} int idx=engine.coord_to_idx(c); if(idx<0){ std::cout << "Coordonnée mal formée"<<std::endl; continue;} if(engine.play_move(idx)) std::cout << "Played "<<c<<std::endl; else std::cout << "Coup illégal"<<std::endl; }
         else if(cmd=="gen"){ int ms; if(!(ss>>ms)) ms=0; int mv=engine.genmove(ms); if(mv<0) { std::cout << "No move"<<std::endl; continue;} std::cout << "Engine plays "<<engine.idx_to_coord(mv)<<" (winrate "<<engine.last_stats().root_winrate*100<<"%)"<<std::endl; }
         else { std::cout << "Unknown command"<<std::endl; }
         Player w; if(engine.is_terminal(&w)){ std::cout << (w==WHITE?"White":"Black") << " wins!"<<std::endl; engine.print(std::cout); }

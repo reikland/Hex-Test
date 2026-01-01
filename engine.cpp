@@ -1,4 +1,5 @@
 #include "engine.hpp"
+#include <cctype>
 
 namespace hex {
 namespace {
@@ -121,8 +122,21 @@ std::string Engine::idx_to_coord(int id) const{
 
 int Engine::coord_to_idx(const std::string& s) const{
     if(s.size()<2) return -1;
-    int c=std::tolower(s[0])-'a'; int r=std::stoi(s.substr(1))-1;
-    if(!on_board(r,c)) return -1; return idx(r,c);
+
+    char col_char = static_cast<char>(std::tolower(static_cast<unsigned char>(s[0])));
+    if(col_char < 'a') return -1;
+    int c = col_char - 'a';
+    if(c >= N_) return -1;
+
+    int row = 0;
+    for(size_t i = 1; i < s.size(); ++i){
+        char ch = s[i];
+        if(!std::isdigit(static_cast<unsigned char>(ch))) return -1;
+        row = row * 10 + (ch - '0');
+    }
+
+    if(row < 1 || row > N_) return -1;
+    return idx(row - 1, c);
 }
 
 bool Engine::is_terminal(Player* winner) const{
