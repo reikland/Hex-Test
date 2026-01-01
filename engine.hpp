@@ -66,7 +66,17 @@ private:
     uint64_t zobrist_side_;
     mutable std::mt19937_64 rng_;
     // union-find per player
-    struct UF { std::vector<int> p, r; void init(int n); int find(int); int find_const(int) const; void unite(int,int); bool connected(int,int) const; };
+    struct UF {
+        struct Change { int child=-1; int parent=-1; bool rank_inc=false; };
+        std::vector<int> p, r; std::vector<Change> hist;
+        void init(int n);
+        int find(int) const;
+        int find_const(int) const;
+        void unite(int,int);
+        bool connected(int,int) const;
+        size_t snapshot() const;
+        void rollback(size_t snap);
+    };
     UF uf_w_, uf_b_;
     int virt_w_top_, virt_w_bot_, virt_b_left_, virt_b_right_;
     // helpers
@@ -107,6 +117,9 @@ private:
     double policy_prior(Player pl, const PathInfo& pi, std::vector<int>& moves, std::vector<double>& priors);
     double puct_score(const Node* parent, const Edge& e) const;
     double simulate(Node* node, int depth);
+    struct MoveUndo { int pos; Player player; uint64_t prev_hash; size_t uf_w_snapshot; size_t uf_b_snapshot; };
+    std::vector<MoveUndo> move_stack_;
+    bool undo_move();
 };
 
 } // namespace hex

@@ -11,11 +11,26 @@ uint64_t splitmix64(uint64_t x){
 }
 }
 
-void Engine::UF::init(int n){ p.resize(n); r.assign(n,0); std::iota(p.begin(), p.end(),0);} 
-int Engine::UF::find(int x){ return p[x]==x?x:p[x]=find(p[x]); }
+void Engine::UF::init(int n){ p.resize(n); r.assign(n,0); hist.clear(); std::iota(p.begin(), p.end(),0); }
+int Engine::UF::find(int x) const { while(p[x]!=x) x=p[x]; return x; }
 int Engine::UF::find_const(int x) const { while(p[x]!=x) x=p[x]; return x; }
-void Engine::UF::unite(int a,int b){ a=find(a); b=find(b); if(a==b) return; if(r[a]<r[b]) std::swap(a,b); p[b]=a; if(r[a]==r[b]) r[a]++; }
+void Engine::UF::unite(int a,int b){
+    a=find(a); b=find(b); if(a==b){ hist.push_back(Change{}); return; }
+    if(r[a]<r[b]) std::swap(a,b);
+    bool inc = (r[a]==r[b]);
+    p[b]=a; if(inc) r[a]++;
+    hist.push_back(Change{b,a,inc});
+}
 bool Engine::UF::connected(int a,int b) const { return find_const(a)==find_const(b); }
+size_t Engine::UF::snapshot() const { return hist.size(); }
+void Engine::UF::rollback(size_t snap){
+    while(hist.size()>snap){
+        Change ch=hist.back(); hist.pop_back();
+        if(ch.child<0) continue;
+        if(ch.rank_inc) r[ch.parent]--;
+        p[ch.child]=ch.child;
+    }
+}
 
 Engine::Engine(const EngineConfig& cfg):cfg_(cfg),N_(cfg.board_size),to_move_(BLACK),zobrist_hash_(0),rng_(cfg.seed){
     reset(N_);
@@ -25,6 +40,7 @@ void Engine::reset(int board_size){
     if(board_size>0) N_=board_size; else N_=cfg_.board_size;
     board_.assign(N_*N_, EMPTY);
     to_move_=BLACK;
+    move_stack_.clear();
     size_t table = N_*N_*2;
     zobrist_board_.resize(table);
     uint64_t seed = cfg_.seed+123;
@@ -74,15 +90,29 @@ void Engine::rebuild_uf(){
 bool Engine::play_move(int pos){
     if(pos<0 || pos>=N_*N_ || board_[pos]!=EMPTY) return false;
     Player pl=to_move_;
+    MoveUndo undo{pos, pl, zobrist_hash_, uf_w_.snapshot(), uf_b_.snapshot()};
     board_[pos]=pl;
     zobrist_hash_ ^= zobrist_board_[pos*2 + (pl==WHITE?0:1)];
     zobrist_hash_ ^= zobrist_side_;
     to_move_ = (pl==WHITE?BLACK:WHITE);
     update_uf(pos,pl);
+    move_stack_.push_back(std::move(undo));
     return true;
 }
 
-bool Engine::play_coord(const std::string& s){ int id=coord_to_idx(s); if(id<0) return false; return play_move(id);} 
+bool Engine::play_coord(const std::string& s){ int id=coord_to_idx(s); if(id<0) return false; return play_move(id);}
+
+bool Engine::undo_move(){
+    if(move_stack_.empty()) return false;
+    MoveUndo undo = move_stack_.back();
+    move_stack_.pop_back();
+    board_[undo.pos]=EMPTY;
+    to_move_=undo.player;
+    zobrist_hash_=undo.prev_hash;
+    uf_w_.rollback(undo.uf_w_snapshot);
+    uf_b_.rollback(undo.uf_b_snapshot);
+    return true;
+}
 
 std::string Engine::idx_to_coord(int id) const{
     auto [r,c]=rc(id);
@@ -290,17 +320,17 @@ int Engine::rollout_move(Player pl){
 
 double Engine::rollout(Player pl){
     last_stats_.playouts++;
-    int plies=0; Player winner; std::vector<std::tuple<int,Player,uint64_t>> hist;
+    int plies=0; Player winner; size_t snap=move_stack_.size();
     while(plies<cfg_.rollout_max_plies){
         if(is_terminal(&winner)) break;
         int m=rollout_move(to_move_);
         if(m<0) break;
-        Player prev=to_move_; uint64_t h=zobrist_hash_; play_move(m); hist.emplace_back(m,prev,h); plies++;
+        play_move(m);
+        plies++;
     }
     double val;
     if(is_terminal(&winner)) val = (winner==pl)?1:-1; else val = heuristic_value(pl);
-    for(auto it=hist.rbegin(); it!=hist.rend(); ++it){ int pos; Player prev; uint64_t h; std::tie(pos,prev,h)=*it; board_[pos]=EMPTY; to_move_=prev; zobrist_hash_=h; }
-    rebuild_uf();
+    while(move_stack_.size()>snap) undo_move();
     return val;
 }
 
@@ -324,13 +354,11 @@ double Engine::simulate(Node* node, int depth){
     Edge* best=nullptr; double best_score=-1e9; for(auto &e: node->edges){ double s=puct_score(node,e); if(s>best_score){ best_score=s; best=&e; }}
     if(!best) return 0;
     Node* child=best->child;
-    Player prev_to=to_move_; uint64_t prev_hash=zobrist_hash_;
     play_move(best->move);
     if(!child){ uint64_t h=zobrist_hash_; child=get_node(h); if(!child){ child=new_node(); child->hash=h; child->player=to_move_; if(cfg_.use_transposition) { tt_[h]=child; maybe_evict_tt(); } }
         best->child=child; }
     double v = -simulate(child, depth+1);
-    // undo
-    board_[best->move]=EMPTY; to_move_=prev_to; zobrist_hash_=prev_hash; rebuild_uf();
+    undo_move();
     best->N++; best->W+=v; best->Q=best->W/std::max(1,best->N);
     node->N++; node->W+=v; node->Q=node->W/node->N;
     return v;
